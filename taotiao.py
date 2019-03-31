@@ -4,12 +4,15 @@ import time
 import os
 import requests
 import urllib.request
+from retrying import retry
+from lxml import html
 from models import News
 class Taotiao_Spider():
     def __init__(self):
         self.url="https://www.toutiao.com"
         self.driver=webdriver.Chrome()
-        self.path="django/3.8/BrainPower/static/src/images/news"
+        # self.path="django/3.8/BrainPower/static/src/images/news"
+        self.path = "F:\django\\3.8\BrainPower\static\src\images\\news"
         self.img_path="/src/images"
 
 
@@ -60,9 +63,9 @@ class Taotiao_Spider():
     def parse(self,parent_urls,parent_titles):
         print(parent_urls,parent_titles)
         print(len(parent_urls),len(parent_titles))
+        items = []
 
         for i in range(0,len(parent_urls)):
-            items=[]
             self.driver.get(parent_urls[i])
             js = "var q=document.documentElement.scrollTop=10000"
             time.sleep(2)
@@ -79,9 +82,34 @@ class Taotiao_Spider():
                     news['news_title']=element.find_element_by_xpath(".//div[@class='title-box']/a").text
                     news['news_image']=element.find_element_by_xpath(".//a[@class='img-wrap']/img").get_attribute('src')
                     news['news_img_path']=self.download(news['news_image'],news['news_title'][0:2],news['parentTitles'])
+                    #news['news_content']=self.news_parse(news)
+                    items.append(news)
                     print(news)
                 except Exception as re:
                     print(re)
+
+        return items
+
+    @retry(stop_max_attempt_number=3)  # 执行3次，3次都不成功才不成功，成功一次就成功
+    def news_parse(self,items_list):
+        for item in items_list:
+            try:
+                self.driver.get(item['sonUrls'])
+                time.sleep(10)
+                item['news_content']=self.driver.find_element_by_xpath("//div[@class='article-content']/div").text
+                item['news_content']= item['news_content'].replace("\n","").strip()
+                print(item)
+
+            except Exception as f:
+                print(f)
+        return items_list
+
+
+
+
+
+
+
     #图片下载
     def download(self,image_url,filename,parent_title):
         paths = self.path + "/" + parent_title
@@ -94,7 +122,7 @@ class Taotiao_Spider():
                         if chunk:
                             f.write(chunk)
                             f.flush()
-                            print("下载完成")
+                            #print("下载完成")
         except Exception as e:
             print(e)
         finally:
@@ -143,11 +171,15 @@ class Taotiao_Spider():
 
 
 
-        #3获取数据
-        self.parse(parent_urls,parent_title)
+        #3获取新闻相关数据
+        item_list=self.parse(parent_urls,parent_title)
+
+        # 4获取新闻内容
+        data_list=self.news_parse(item_list)
 
 
-        #4保存到数据库
+        #5保存到数据库
+
 
 
 if __name__=='__main__':
